@@ -170,6 +170,23 @@ The endpoints are protected by `Authorization: Bearer CRON_SECRET`.
 
 ---
 
+## 6b. Seeding the video database
+
+To pre-populate Notly with hundreds of thousands of popular YouTube videos, run the seed script once after setup:
+
+```bash
+# Make sure your .env.local has YOUTUBE_API_KEY and SUPABASE_* set
+npm run seed
+```
+
+The script imports the **most popular videos** from 55+ countries and 16 categories. With the free YouTube API quota (10,000 units/day), one run imports ~**50,000–100,000 videos**.
+
+Run it once to get started. After that, the nightly cron at `/api/cron/seed` keeps the database fresh by importing new trending videos every day.
+
+> **Note**: The seed script takes 5–15 minutes to run. You can interrupt it at any time — already-imported videos are saved.
+
+---
+
 ## 7. Project structure
 
 ```

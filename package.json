@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "DOTENV_CONFIG_PATH=.env.local ts-node --project tsconfig.seed.json -r dotenv/config scripts/seed-videos.ts"
+    "seed": "DOTENV_CONFIG_PATH=.env.local npx ts-node -r dotenv/config --project tsconfig.seed.json scripts/seed-videos.ts",
+    "seed:france": "DOTENV_CONFIG_PATH=.env.local npx ts-node -r dotenv/config --project tsconfig.seed.json scripts/seed-france.ts"
   },
   "dependencies": {
     "@next-auth/supabase-adapter": "^0.2.1",
@@ -36,10 +37,12 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "dotenv": "^17.4.2",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }
