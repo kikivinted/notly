@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { VideoCard } from '@/components/ui/VideoCard'
 import { VideoWithCreator } from '@/types'
-import { ArrowRight, Star, TrendingUp, Users, Zap } from 'lucide-react'
+import { ArrowRight, Search, Star, TrendingUp, Users, Zap } from 'lucide-react'
 
 async function getTrendingVideos(): Promise<VideoWithCreator[]> {
   const supabase = createClient()
@@ -109,9 +109,14 @@ export default async function HomePage() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-16 text-text-secondary">
-              <p className="text-lg">No videos yet.</p>
-              <p className="text-sm mt-2">Be the first creator to join Notly!</p>
+            <div className="text-center py-16">
+              <div className="inline-flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-6 py-4 mb-6">
+                <Search className="w-5 h-5 text-accent" />
+                <p className="text-white font-medium">Search any YouTube video to rate it</p>
+              </div>
+              <p className="text-text-secondary text-sm">
+                Type a video title or channel name in the search bar above.
+              </p>
             </div>
           )}
         </div>

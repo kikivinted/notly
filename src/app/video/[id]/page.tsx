@@ -12,12 +12,27 @@ import { Eye, Clock, Calendar } from 'lucide-react'
 
 async function getVideo(id: string): Promise<VideoWithCreator | null> {
   const supabase = createClient()
+
+  // Try by Notly UUID first
   const { data } = await supabase
     .from('videos')
     .select('*, creators(*, users(*))')
     .eq('id', id)
     .single()
-  return data as VideoWithCreator | null
+
+  if (data) return data as VideoWithCreator
+
+  // Try by YouTube video ID (11-char alphanumeric)
+  if (/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+    const { data: byYtId } = await supabase
+      .from('videos')
+      .select('*, creators(*, users(*))')
+      .eq('youtube_video_id', id)
+      .single()
+    if (byYtId) return byYtId as VideoWithCreator
+  }
+
+  return null
 }
 
 async function getRatingBreakdown(videoId: string) {

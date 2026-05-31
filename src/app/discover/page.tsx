@@ -89,8 +89,20 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Sea
           ) : (
             <div className="text-center py-24">
               <Search className="w-12 h-12 text-text-muted mx-auto mb-4" />
-              <p className="text-white font-semibold text-lg">No videos found</p>
-              <p className="text-text-secondary mt-2">Try adjusting your filters or search terms</p>
+              <p className="text-white font-semibold text-lg">No rated videos found for this search</p>
+              <p className="text-text-secondary mt-2 mb-6">
+                Use the search bar at the top to find any YouTube video and add it to Notly.
+              </p>
+              {searchParams.q && (
+                <a
+                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(searchParams.q)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-surface-2 border border-border hover:border-border-hover text-white px-6 py-3 rounded-xl transition-colors text-sm"
+                >
+                  Search "{searchParams.q}" on YouTube ↗
+                </a>
+              )}
             </div>
           )}
         </Suspense>
