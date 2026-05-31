@@ -70,16 +70,18 @@ export function VideoCard({ video, rank, showRankChange, previousRank, size = 'm
             {video.title}
           </h3>
           <div className="flex items-center gap-2 mb-2">
-            {video.creators?.channel_thumbnail && (
+            {(video.creators?.channel_thumbnail || (video as any).channel_thumbnail) && (
               <Image
-                src={video.creators.channel_thumbnail}
-                alt={video.creators.channel_name}
+                src={video.creators?.channel_thumbnail || (video as any).channel_thumbnail}
+                alt={video.creators?.channel_name || (video as any).channel_name || 'Channel'}
                 width={20}
                 height={20}
                 className="rounded-full"
               />
             )}
-            <span className="text-xs text-text-secondary truncate">{video.creators?.channel_name}</span>
+            <span className="text-xs text-text-secondary truncate">
+              {video.creators?.channel_name || (video as any).channel_name || 'Unknown channel'}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">

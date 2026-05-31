@@ -93,6 +93,8 @@ export async function getVideoInfo(videoId: string): Promise<YouTubeVideo | null
       duration: parseDuration(video.contentDetails?.duration || ''),
       publishedAt: video.snippet?.publishedAt || new Date().toISOString(),
       viewCount: parseInt(video.statistics?.viewCount || '0'),
+      channelId: video.snippet?.channelId || '',
+      channelTitle: video.snippet?.channelTitle || '',
     }
   } catch (error) {
     console.error('YouTube getVideoInfo error:', error)

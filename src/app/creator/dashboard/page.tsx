@@ -25,9 +25,9 @@ export default async function CreatorDashboardPage() {
         <div className="max-w-2xl mx-auto text-center">
           <AlertCircle className="w-16 h-16 mx-auto mb-4 text-text-secondary" />
           <h1 className="font-display text-3xl font-bold text-white mb-4">Creator account required</h1>
-          <p className="text-text-secondary mb-6">Subscribe to the Creator Pro plan to access your dashboard.</p>
-          <Link href="/pricing" className="bg-accent hover:bg-accent-hover text-white font-semibold px-8 py-3 rounded-xl transition-colors inline-block">
-            View pricing
+          <p className="text-text-secondary mb-6">Connect your YouTube channel to claim your videos and access your creator dashboard — it's free.</p>
+          <Link href="/creator/dashboard/channel" className="bg-accent hover:bg-accent-hover text-white font-semibold px-8 py-3 rounded-xl transition-colors inline-block">
+            Connect my channel
           </Link>
         </div>
       </div>

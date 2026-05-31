@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed": "DOTENV_CONFIG_PATH=.env.local ts-node --project tsconfig.seed.json -r dotenv/config scripts/seed-videos.ts"
   },
   "dependencies": {
     "@next-auth/supabase-adapter": "^0.2.1",

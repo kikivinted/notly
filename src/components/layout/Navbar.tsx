@@ -6,13 +6,15 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User } from '@/types'
 import { cn } from '@/lib/utils'
-import { Menu, X, Search, Bell, ChevronDown, LogOut, Settings, LayoutDashboard } from 'lucide-react'
+import { Menu, X, Search, Bell, ChevronDown, LogOut, Settings, LayoutDashboard, Plus } from 'lucide-react'
+import { AddVideoModal } from '@/components/ui/AddVideoModal'
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [scrolled, setScrolled] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [addVideoOpen, setAddVideoOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const pathname = usePathname()
   const router = useRouter()
@@ -101,6 +103,13 @@ export function Navbar() {
             </form>
 
             {user ? (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setAddVideoOpen(true)}
+                  className="flex items-center gap-1.5 bg-accent/10 hover:bg-accent/20 border border-accent/20 text-accent text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Add video
+                </button>
               <div className="relative">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -151,6 +160,7 @@ export function Navbar() {
                     </button>
                   </div>
                 )}
+              </div>
               </div>
             ) : (
               <div className="flex items-center gap-3">
@@ -218,6 +228,7 @@ export function Navbar() {
           </div>
         </div>
       )}
+      {addVideoOpen && <AddVideoModal onClose={() => setAddVideoOpen(false)} />}
     </nav>
   )
 }

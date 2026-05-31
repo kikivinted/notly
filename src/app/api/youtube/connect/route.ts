@@ -6,7 +6,6 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -18,34 +17,46 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient()
 
-  const { data: creator } = await admin
-    .from('creators')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!creator || !creator.is_active) {
-    return NextResponse.json({ error: 'Active creator subscription required' }, { status: 403 })
-  }
-
   // Validate channel via YouTube API
   const channelInfo = await getChannelInfo(channelId)
   if (!channelInfo) {
     return NextResponse.json({ error: 'YouTube channel not found' }, { status: 404 })
   }
 
-  // Update creator with channel info
-  await admin.from('creators').update({
-    youtube_channel_id: channelId,
-    channel_name: channelInfo.title,
-    channel_thumbnail: channelInfo.thumbnailUrl,
-    subscriber_count: channelInfo.subscriberCount,
-  }).eq('id', creator.id)
+  // Upsert creator record (free, no subscription required)
+  const { data: creator, error: creatorError } = await admin
+    .from('creators')
+    .upsert({
+      user_id: user.id,
+      youtube_channel_id: channelId,
+      channel_name: channelInfo.title,
+      channel_thumbnail: channelInfo.thumbnailUrl,
+      subscriber_count: channelInfo.subscriberCount,
+      is_active: true,
+      subscription_status: null,
+    }, { onConflict: 'user_id' })
+    .select()
+    .single()
 
-  // Import initial videos
+  if (creatorError) {
+    return NextResponse.json({ error: creatorError.message }, { status: 500 })
+  }
+
+  // Update user role to creator
+  await admin.from('users').update({ role: 'creator' }).eq('id', user.id)
+
+  // Link existing videos with this channel_id to this creator
+  await admin
+    .from('videos')
+    .update({ creator_id: creator.id })
+    .eq('youtube_channel_id', channelId)
+    .is('creator_id', null)
+
+  // Import new videos
   const videos = await getChannelVideos(channelId, 50)
+  let imported = 0
   for (const video of videos) {
-    await admin.from('videos').upsert({
+    const { error } = await admin.from('videos').upsert({
       creator_id: creator.id,
       youtube_video_id: video.id,
       title: video.title,
@@ -54,8 +65,12 @@ export async function POST(request: NextRequest) {
       duration: video.duration,
       published_at: video.publishedAt,
       view_count: video.viewCount,
-    }, { onConflict: 'youtube_video_id', ignoreDuplicates: true })
+      youtube_channel_id: channelId,
+      channel_name: channelInfo.title,
+      channel_thumbnail: channelInfo.thumbnailUrl,
+    }, { onConflict: 'youtube_video_id', ignoreDuplicates: false })
+    if (!error) imported++
   }
 
-  return NextResponse.json({ success: true, channel: channelInfo, videosImported: videos.length })
+  return NextResponse.json({ success: true, channel: channelInfo, videosImported: imported })
 }

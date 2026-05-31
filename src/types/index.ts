@@ -26,7 +26,7 @@ export interface Creator {
 
 export interface Video {
   id: string
-  creator_id: string
+  creator_id: string | null
   youtube_video_id: string
   title: string
   description: string | null
@@ -37,6 +37,9 @@ export interface Video {
   avg_rating: number
   total_votes: number
   imported_at: string
+  youtube_channel_id?: string
+  channel_name?: string
+  channel_thumbnail?: string
   creators?: Creator
 }
 
@@ -111,6 +114,16 @@ export interface YouTubeVideo {
   duration: string
   publishedAt: string
   viewCount: number
+  channelId?: string
+  channelTitle?: string
+}
+
+export interface YouTubeChannelRef {
+  id: string
+  youtube_channel_id: string
+  channel_name: string
+  channel_thumbnail: string | null
+  subscriber_count: number
 }
 
 export interface YouTubeChannel {
