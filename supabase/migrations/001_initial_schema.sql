@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.creators (
 -- Videos table
 CREATE TABLE IF NOT EXISTS public.videos (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  creator_id UUID REFERENCES public.creators(id) ON DELETE CASCADE NOT NULL,
+  creator_id UUID REFERENCES public.creators(id) ON DELETE SET NULL,
   youtube_video_id TEXT UNIQUE NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
@@ -164,10 +164,8 @@ CREATE POLICY "Authenticated users can insert creator" ON public.creators FOR IN
 
 -- Videos policies
 CREATE POLICY "Videos are publicly viewable" ON public.videos FOR SELECT USING (true);
-CREATE POLICY "Creators can insert their videos" ON public.videos
-  FOR INSERT WITH CHECK (
-    creator_id IN (SELECT id FROM public.creators WHERE user_id = auth.uid())
-  );
+CREATE POLICY "Anyone authenticated can insert videos" ON public.videos
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "Creators can update their videos" ON public.videos
   FOR UPDATE USING (
     creator_id IN (SELECT id FROM public.creators WHERE user_id = auth.uid())
