@@ -1,13 +1,12 @@
 /**
- * Seed script — 156 chaînes YouTube françaises spécifiques.
- * Importe toutes les vidéos de chaque chaîne.
+ * Seed script — 143 chaînes YouTube françaises avec Channel IDs hardcodés.
+ * Importe toutes les vidéos de chaque chaîne directement, sans appels de découverte.
  *
- * Stratégie quota-friendly :
- *   1. channels.list?forHandle=@slug  → 1 unité par chaîne (très bon marché)
- *   2. Si échec → search.list?q=nom   → 100 unités (fallback)
+ * Coût API : ~6-8 unités par chaîne (channels.list + playlistItems + videos.list)
+ * Quota gratuit = 10 000 unités/jour → ~150 chaînes par run
  *
  * Usage :
- *   DOTENV_CONFIG_PATH=.env.local npx ts-node -r dotenv/config --project tsconfig.seed.json scripts/seed-channels-fr.ts
+ *   npm run seed:channels
  */
 
 import { google } from 'googleapis'
@@ -25,183 +24,171 @@ const supabase = createClient(
 )
 
 const PROGRESS_FILE = '.seed-channels-fr-progress.json'
-const MAX_VIDEOS_PER_CHANNEL = 500  // max vidéos importées par chaîne
+const MAX_VIDEOS_PER_CHANNEL = 500
 const MAX_API_UNITS = 9_500
 
 let apiUnitsUsed = 0
 let totalVideos = 0
 
-// ─── Liste des 156 chaînes ────────────────────────────────────────────────────
-// Format: [nom_affiché, slug_handle_probable] — le slug est testé en premier (1 unité)
+// ─── 143 chaînes françaises — [nom, channelId] ───────────────────────────────
 const CHANNELS: [string, string][] = [
-  ['Nick Jr. France',            'nickjrfrance'],
-  ['Kidi Fun',                   'kidifun'],
-  ['Squeezie',                   'squeezie'],
-  ['Swan & Néo',                 'swanneo'],
-  ['Ryhan Family',               'ryhanfamily'],
-  ['Tuvok12',                    'tuvok12'],
-  ['Mayamystic',                 'mayamystic'],
-  ['Furious Jumper',             'furiousjumper'],
-  ['Fitness Muscu',              'fitnessmuscufr'],
-  ['Seany Tv',                   'seanytv'],
-  ['Fadi Maaz',                  'fadimaaz'],
-  ['Amixem',                     'amixem'],
-  ['Le Foot en Vidéo',           'lefootenvideo'],
-  ['Grizzy et les Lemmings',     'grizzyleslemmings'],
-  ['Madame Récré FR',            'madamerecrefr'],
-  ['Léo Léo',                    'leoleo'],
-  ['Sarah Lezito',               'sarahlezito'],
-  ['FilmsActu',                  'filmsactu'],
-  ['Remi Ragnar',                'remiragnar'],
-  ['Cyprien',                    'cyprien'],
-  ['Unchained Off',              'unchainedoff'],
-  ['The Voice France',           'thevoicefrance'],
-  ['Michou',                     'michouofficial'],
-  ['BATZAIR',                    'batzair'],
-  ['Peppa Pig Français',         'peppapigfrancais'],
-  ['Le Parisien',                'leparisien'],
-  ['Disney Kids FR',             'disneykidsfr'],
-  ['Arabian Fairy Tales',        'arabianfairytales'],
-  ['Dimerci TV',                 'dimercitv'],
-  ['McFly et Carlito',           'mcflyetcarlito'],
-  ['KIDIBLI en Français',        'kidiblifrancais'],
-  ['ADEL et SAMI',               'adeletsami'],
-  ['HeyKids Chansons',           'heykidschansons'],
-  ['EchoroukTV',                 'echorouk'],
-  ['Squeezie Gaming',            'squeeziegaming'],
-  ['ROOKIE',                     'rookiefr'],
-  ['Wankil Studio',              'wankilstudio'],
-  ['L\'étoile Noire',            'letoilenoire'],
-  ['Palmashow',                  'palmashow'],
-  ['Natop Shorts',               'natopshorts'],
-  ['Creamimy Artist',            'creaimyartist'],
-  ['Lama Faché',                 'lamafache'],
-  ['Unchained',                  'unchained'],
-  ['FastGoodCuisine',            'fastgoodcuisine'],
-  ['Renard',                     'renard'],
-  ['Nickelodeon France',         'nickelodeonfrance'],
-  ['Misha et Alex',              'mishaAlex'],
-  ['SAM le SLICK SLIME',         'samslickslime'],
-  ['Séan Garnier',               'seangarnier'],
-  ['Comptines et Chansons',      'comptineschansons'],
-  ['Rémi Gaillard',              'remigaillard'],
-  ['Le Déraciné',                'lederacine'],
-  ['MichouOff',                  'michouoff'],
-  ['Anas Le Bled Art',           'anasledart'],
-  ['Bleu',                       'bleufr'],
-  ['WB Kids Français',           'wbkidsfrancais'],
-  ['MatiFamily',                 'matifamily'],
-  ['Tam Tam TV',                 'tamtamtv'],
-  ['L\'atelier de Roxane',       'atelierroxane'],
-  ['BroxEditZ',                  'broxeditz'],
-  ['JOYCA',                      'joyca'],
-  ['Binge Society',              'bingesociety'],
-  ['GameMixTreize',              'gamemixtreize'],
-  ['Fuze III',                   'fuzeiii'],
-  ['XILAM TV',                   'xilamtv'],
-  ['Brico Sympa',                'bricosympa'],
-  ['Mr President',               'mrpresident'],
-  ['Europe 1',                   'europe1'],
-  ['REDKILL',                    'redkill'],
-  ['Cartoon Network France',     'cartoonnetworkfr'],
-  ['TheLyonBlack',               'thelyonblack'],
-  ['Bollywood Mania',            'bollywoodmania'],
-  ['SYMPA',                      'sympa'],
-  ['France 24 Arabic',           'france24arabic'],
-  ['Loïc Suberville',            'loicsuberville'],
-  ['Investigation Discovery FR', 'investigationfr'],
-  ['BFMTV',                      'bfmtv'],
-  ['Star Freestyle',             'starfreestyle'],
-  ['CANAL+ Sport',               'canalplussport'],
-  ['Polo CBGames',               'cbgames'],
-  ['Fantasyange',                'fantasyange'],
-  ['lilyslilah',                 'lilyslilah'],
-  ['Chefclub',                   'chefclubfr'],
-  ['Cinéma Cinémas',             'cinemacinemas'],
-  ['Redha Jr',                   'redhajr'],
-  ['LeHuffPost',                 'lehuffpost'],
-  ['Sam Zirah',                  'samzirah'],
-  ['Antton Racca',               'anttonracca'],
-  ['Fédération Française de Football', 'fff'],
-  ['Booshra',                    'booshra'],
-  ['Miraculous FR',              'miraculousfr'],
-  ['Les P\'tits z\'Amis',        'lespttitszamis'],
-  ['Caillou Français',           'cailloufrancais'],
-  ['Rabbids Invasion',           'rabbidsinvasion'],
-  ['PSG',                        'psg'],
-  ['Ubisoft',                    'ubisoft'],
-  ['Patrick Sébastien',          'patricksebastien'],
-  ['Rock n Insectes',            'rockninsectes'],
-  ['HugoDécrypte',               'hugodecrypte'],
-  ['The Voice Kids France',      'thevoicekidsfrance'],
-  ['SUPERBOUMJ',                 'superboumj'],
-  ['LCI',                        'lcitv'],
-  ['Inoxtag',                    'inoxtag'],
-  ['AFP News Agency',            'afpnews'],
-  ['YOUCAR',                     'youcar'],
-  ['CYRILmp4',                   'cyrilmp4'],
-  ['Les Parodie Bros',           'lesparodiebros'],
-  ['Le Rire Jaune',              'lerirejauneofficiel'],
-  ['Ligue 1 McDonald\'s',        'ligue1mcdonalds'],
-  ['Brut',                       'brutfr'],
-  ['LeBouseuh',                  'lebouseuh'],
-  ['Siphano',                    'siphano'],
-  ['Casquey',                    'casquey'],
-  ['Bref Rap',                   'brefrap'],
-  ['Studio Bagel',               'studiobagel'],
-  ['BabyZone',                   'babyzone'],
-  ['MrBoom',                     'mrboomfr'],
-  ['Lolywood',                   'lolywood'],
-  ['Mastu',                      'mastu'],
-  ['WooHoo FR',                  'woohoofr'],
-  ['Dr Nozman',                  'drnozman'],
-  ['Netflix France',             'netflixfrance'],
-  ['StundZow',                   'stundzow'],
-  ['Zapping Sauvage',            'zappingsauvage'],
-  ['Boogytoons',                 'boogytoons'],
-  ['loufitlove',                 'loufitlove'],
-  ['Supermassive',               'supermassive'],
-  ['Amelina Kiss',               'amelinakiss'],
-  ['Antoine Anecdotes',          'antoineanecdotes'],
-  ['TF1 INFO',                   'tf1info'],
-  ['Valouzz',                    'valouzz'],
-  ['CodFamilya',                 'codfamilya'],
-  ['Golden Moustache',           'goldenmoustache'],
-  ['Booska-P',                   'booskap'],
-  ['WildBrain Enfants',          'wildbrainenfants'],
-  ['Cléopâtre',                  'cleopatre'],
-  ['Les Anges',                  'lesanges'],
-  ['Cute Roblox TV',             'cuteroboxtv'],
-  ['Astuces du Panda',           'astucesdupanda'],
-  ['Poisson Fécond',             'poissonfecond'],
-  ['Hugoposé',                   'hugopose'],
-  ['Fechal Vidéo',               'fechalvideo'],
-  ['Rzm64',                      'rzm64'],
-  ['Les Patapons',               'lespatapons'],
-  ['Le Monde à l\'Envers',       'lemondeenvers'],
-  ['Sora',                       'sorafr'],
-  ['Ninjaxx',                    'ninjaxx'],
-  ['Levilone Family',            'levilonefamily'],
-  ['Skyrroz',                    'skyrroz'],
-  ['Natoo',                      'natoo'],
+  ['Nick Jr. France',                  'UCKjDy-Wv29ZVd_itGOe76LA'],
+  ['Kidi Fun',                         'UCKG_7KqdGT4YceIh-lCfNUA'],
+  ['Squeezie',                         'UCWeg2Pkate69NFdBeuRFTAw'],
+  ['Swan & Néo',                       'UCzYC9ss2P77Ry2LzIDL5Xsw'],
+  ['Ryhan Family',                     'UCcFQLco2CA2uq9J2Uwcoi6Q'],
+  ['Tuvok12',                          'UC5xkroXBlsRzInHzVaFO5HA'],
+  ['Mayamystic',                       'UCsbzkA9S4TPhkt2Kl2Rx3ig'],
+  ['Furious Jumper',                   'UCLMKLU-ZuDQIsbjMvR3bbog'],
+  ['Fitness Muscu',                    'UCev7uCn7hMoehbcMj1sadcQ'],
+  ['Seany Tv',                         'UCpCLsVt-9LhvDKvEzE7Kw7A'],
+  ['Fadi Maaz',                        'UCUB7RmTY80Wy0Xo0biV34vQ'],
+  ['Amixem',                           'UCgvqvBoSHB1ctlyyhoHrGwQ'],
+  ['Le Foot en Vidéo',                 'UC960cXgEv6mCZ5iGnWSd0oQ'],
+  ['Grizzy et les Lemmings',           'UCn9l4gU5mkmmlC2eiVu0LHw'],
+  ['Madame Récré FR',                  'UCH0HvBshlVE7gCoV6as51og'],
+  ['Léo Léo',                          'UCJDBsRxSr-sSHjLyZOeiG3g'],
+  ['Sarah Lezito',                     'UCvlBxzsiVjykUcKW9OxN8kg'],
+  ['FilmsActu',                        'UC_i8X3p8oZNaik8X513Zn1Q'],
+  ['Remi Ragnar',                      'UCD1DAIeBN62QafNLArqZDrQ'],
+  ['Cyprien',                          'UCyWqModMQlbIo8274Wh_ZsQ'],
+  ['Unchained Off',                    'UCiFyJ_EBmF2XJuR9buWE_3A'],
+  ['The Voice France',                 'UCQRELbX0H5FCokIFxOAsHFA'],
+  ['Michou',                           'UCo3i0nUzZjjLuM7VjAVz4zA'],
+  ['BATZAIR',                          'UCCU2Tvanl8gLaJ7pYDuIYkg'],
+  ['Peppa Pig Français',               'UCXptamDYEVcU4JCio30hYTw'],
+  ['Le Parisien',                      'UCfHn_8-ehdem86fEvlFg-Gw'],
+  ['Disney Kids FR',                   'UC7Gf2tZ8coTX2ckTPgn62iQ'],
+  ['Arabian Fairy Tales',              'UCazFScO30FKY3YoNNDfNY5g'],
+  ['Dimerci TV',                       'UCXFrzOlPpbOZOd1KClSWlQw'],
+  ['McFly et Carlito',                 'UCDPK_MTu3uTUFJXRVcTJcEw'],
+  ['KIDIBLI en Français',              'UCustR5f-R1KVU-jZEqGo3_g'],
+  ['ADEL et SAMI',                     'UCPalOwaTaSwFS4PANDNv7Zg'],
+  ['HeyKids Chansons',                 'UCl0KdGiwyqLJCdu5XMIz_TQ'],
+  ['EchoroukTV',                       'UCd9ox6D3VbhNp3kJNTxQzCQ'],
+  ['Squeezie Gaming',                  'UCY-_QmcW09PHAImgVnKxU2g'],
+  ['Wankil Studio',                    'UCYGjxo5ifuhnmvhPvCc3DJQ'],
+  ["L'étoile Noire",                   'UCky8Z5AYEHA55-r2TFNC_KA'],
+  ['Palmashow',                        'UCoZoRz4-y6r87ptDp4Jk74g'],
+  ['Natop Shorts',                     'UCPZJQKRCa8qR42yrbsZPA0A'],
+  ['Creamimy Artist',                  'UCIXh7Oo7kooBy7cTzh86IEg'],
+  ['Lama Faché',                       'UCH0XvUpYcxn4V0iZGnZXMnQ'],
+  ['Unchained',                        'UCugeH-Bmo9a5-Jnbt9X-3bA'],
+  ['FastGoodCuisine',                  'UCKq9JxyISqBHDd-fXfV3QtQ'],
+  ['Nickelodeon France',               'UCeGvSi1Tb8OV78ue3_tux1A'],
+  ['Misha et Alex',                    'UChocYxNSOmyI53eGUuiECvA'],
+  ['SAM le SLICK SLIME',               'UC7mEf-ZbAc7at0QUoI-DiMQ'],
+  ['Séan Garnier',                     'UCIGIk1wN10aAPHusfE7AEPA'],
+  ['Comptines et Chansons',            'UCq6jhYDQ2HBvEPIev8NDglw'],
+  ['Rémi Gaillard',                    'UCmPSwsooZq8an7xOLQQhAdw'],
+  ['Le Déraciné',                      'UCpsvoU1qL4WLR6jvh1CWjhw'],
+  ['MichouOff',                        'UCOdKaYgvLlPuinUJ1z5Gm2g'],
+  ['Anas Le Bled Art',                 'UCP8A8blIPLuL2kSSrhKJIhg'],
+  ['Bleu',                             'UCvBAeCRF5iFQUVueXQT81NQ'],
+  ['WB Kids Français',                 'UCqvIdlrnd4DCcqp2DZwaZYw'],
+  ['MatiFamily',                       'UCdbxtRmc5oM2tQBqpQ-Tk7w'],
+  ['Tam Tam TV',                       'UChOQ_YphUJTEczNXMrUoucg'],
+  ["L'atelier de Roxane",              'UC3rxwrZSiTp6Kk2RXcyHtCA'],
+  ['BroxEditZ',                        'UCf7BD2olgOvb51FaIFNUmhA'],
+  ['JOYCA',                            'UCow2IGnug1l3Xazkrc5jM_Q'],
+  ['Binge Society',                    'UCOo_v3eVbfET7_zi2KLOP9g'],
+  ['GameMixTreize',                    'UCNVMW8UDDZYVxXJqVs3lnUA'],
+  ['Fuze III',                         'UCfznY5SlSoZoXN0-kBPtCdg'],
+  ['XILAM TV',                         'UCunZysK4AQ45ewLs5OhSsrg'],
+  ['Brico Sympa',                      'UC9TJezP2M1ADmUYVl8hrQ2A'],
+  ['Europe 1',                         'UCIMGfEAERXjmWwQeg15BFsg'],
+  ['REDKILL',                          'UCAo9RLXZvUiyRllJ-1Ekefg'],
+  ['Cartoon Network France',           'UCO-sJY43ksC5ir_Jf1YJDew'],
+  ['TheLyonBlack',                     'UCMsCTwRr0vpB8anyEiLJMmg'],
+  ['Bollywood Mania',                  'UCqnNoWp-C7MjIKPTVTBtstQ'],
+  ['SYMPA',                            'UCt6IQpsggvn6zmalhPglSEA'],
+  ['France 24 Arabic',                 'UCdTyuXgmJkG_O8_75eqej-w'],
+  ['Loïc Suberville',                  'UCywGsTdh_qqZUYmA2Gro2CA'],
+  ['BFMTV',                            'UCXwDLMDV86ldKoFVc_g8P0g'],
+  ['Star Freestyle',                   'UCwwgI0AzG5Y2lU-C8LiKP2A'],
+  ['CANAL+ Sport',                     'UC8ggH3zU61XO0nMskSQwZdA'],
+  ['Polo CBGames',                     'UCD94IYXQINu04R0KxOrhEzA'],
+  ['Fantasyange',                      'UC18NpPsh3gV4u7KDSRYGZhw'],
+  ['lilyslilah',                       'UCi86W8vBDYYSRABNpzl5i-w'],
+  ['Chefclub',                         'UCqdiFB7Tfs_DpEMSzmoHZ8w'],
+  ['Cinéma Cinémas',                   'UCQIrvVPHrt2cN14ktGA2Snw'],
+  ['Redha Jr',                         'UCjDJyveN85BFN5QcQ0iDqnQ'],
+  ['LeHuffPost',                       'UC9GGzAhhvhJO1hL10-BcgNA'],
+  ['Sam Zirah',                        'UC_z1oN2V5Im7o5YMY5pfRrA'],
+  ['Antton Racca',                     'UCxAe6guYq0Q-UBfQrEauF2A'],
+  ['Fédération Française de Football', 'UCeJlXGyEl7kBgQJKADAHM3A'],
+  ['Booshra',                          'UCUJjGd8fKVtaZ10YGRB36uw'],
+  ['Miraculous FR',                    'UCIpBLlcyR1W6oEji4_qdrQA'],
+  ["Les P'tits z'Amis",               'UC9pxNghOaqpW4FzW74_KS1Q'],
+  ['Caillou Français',                 'UCBwSqx6A83sNQ5SIYWpmucQ'],
+  ['Rabbids Invasion',                 'UC7KswdJ3yn5yzqUU4wWQHNg'],
+  ['PSG',                              'UCt9a_qP9CqHCNwilf-iULag'],
+  ['Ubisoft',                          'UCEl915e-AtoJ7i1m_SXekTw'],
+  ['Patrick Sébastien',                'UCpo07GQbWMybKrjgoVf4ETg'],
+  ['Rock n Insectes',                  'UC6lDwIetO21Ed4kHMd5Eoxg'],
+  ['HugoDécrypte',                     'UCAcAnMF0OrCtUep3Y4M-ZPw'],
+  ['The Voice Kids France',            'UCxaCpO3C7BM-8zNvP-SgBgQ'],
+  ['SUPERBOUMJ',                       'UCIP_mImUesUeVaLsLEzH9zA'],
+  ['LCI',                              'UCh3EoX0OabKZJj9jMrViBfA'],
+  ['Inoxtag',                          'UCL9aTJb0ur4sovxcppAopEw'],
+  ['AFP News Agency',                  'UC86dbj-lbDks_hZ5gRKL49Q'],
+  ['CYRILmp4',                         'UC-4M8AN08hw39nn2v91VuMQ'],
+  ['Les Parodie Bros',                 'UCMqzZ17aTG2hKj2mVl7U4MA'],
+  ['Le Rire Jaune',                    'UCTt2AnK--mnRmICnf-CCcrw'],
+  ['Brut',                             'UCSKdvgqdnj72_SLggp7BDTg'],
+  ['LeBouseuh',                        'UCUl7mwOyySfZzUkq4H29nug'],
+  ['Siphano',                          'UCwa-qCAFghXwkcQvLadzRxQ'],
+  ['Casquey',                          'UCnnUozIhtK9k_ubGIo8J3FQ'],
+  ['Bref Rap',                         'UCq0u7q5-uCs7djwM5AZdBRg'],
+  ['Studio Bagel',                     'UCZ8kV8vuMdDLSerCIFfWnFQ'],
+  ['BabyZone',                         'UC6vi73R2Z82ppU6OpFwml0A'],
+  ['MrBoom',                           'UCUfHr7rri9NzdINueLllWQg'],
+  ['Lolywood',                         'UCSse-lNI1DQ4w-8lh7vfPUw'],
+  ['Mastu',                            'UCAhaFPP6v3WCfK5Tjao0B7A'],
+  ['WooHoo FR',                        'UC_43FPUCrWzUUsPsdwDCtKw'],
+  ['Dr Nozman',                        'UCWnfDPdZw6A23UtuBpYBbAg'],
+  ['Netflix France',                   'UCroNr00O68n25IqSNapMK8w'],
+  ['StundZow',                         'UCcXNrBbhJ2AwbtiPTzQCJ-A'],
+  ['Zapping Sauvage',                  'UCAdyNOE80FsFPYlFliyXfwQ'],
+  ['Boogytoons',                       'UC2mjGHgbQYCw8zk0yyfB6IA'],
+  ['loufitlove',                       'UCicJflaX_UIUfE8bS5rN0mQ'],
+  ['Supermassive',                     'UCe6iWPkV14Hubsp4uh2PKnw'],
+  ['Amelina Kiss',                     'UCON8Ljv25qnZeKVGyTKG1OA'],
+  ['Antoine Anecdotes',                'UCmXnPRRKXki6EwVbUdcQ8Ng'],
+  ['TF1 INFO',                         'UCsrPUA0ZSDCNZC6wyRlR7ZA'],
+  ['Valouzz',                          'UCNGq4mP3Ds5OUGjPo8IJOcw'],
+  ['CodFamilya',                       'UCbjN965MfRvLTYB0aoKzK_Q'],
+  ['Golden Moustache',                 'UCJruTcTs7Gn2Tk7YC-ENeHQ'],
+  ['Booska-P',                         'UCczuNg-bajJgZLYhrY7FpfA'],
+  ['WildBrain Enfants',                'UCxa1aSLYVSb_yl6uCbZRQKw'],
+  ['Cléopâtre',                        'UCIZ576juGNes2oNxuhTHjbg'],
+  ['Les Anges',                        'UCpW9o_uVp9k2W46HBcXba7Q'],
+  ['Cute Roblox TV',                   'UCUtGeBjufNZbnZvgW1f5u0A'],
+  ['Astuces du Panda',                 'UCWrtcU1OId_PQ_YoBN6lIRA'],
+  ['Poisson Fécond',                   'UC4ii4_aeS8iOFzsHuhJTq2w'],
+  ['Hugoposé',                         'UCByWJsWPztkY3Rta2B62tgg'],
+  ['Rzm64',                            'UC1cqMendY9E3Nl0WHkut1NQ'],
+  ['Les Patapons',                     'UCSpE7jrokfnEaVb7Ujf-hYQ'],
+  ["Le Monde à l'Envers",             'UCeqsLJGWhZXEerY5JWvwLkg'],
+  ['Sora',                             'UCoY9dSehUOccMeV06OGmuQA'],
+  ['Ninjaxx',                          'UCDB1PaqiausfXbVI2Jjk0iQ'],
+  ['Levilone Family',                  'UCuR31TD-TrbjOrEZ0m0TQkg'],
+  ['Skyrroz',                          'UCP4wIoy9W9WdAfVIN2sVmEw'],
+  ['Natoo',                            'UCtihF1ZtlYVzoaj_bKLQZ-Q'],
 ]
 
 // ─── Progress ─────────────────────────────────────────────────────────────────
-interface Progress {
-  done: string[]      // channel names already processed
-  channelIds: Record<string, string>  // name → channelId cache
-}
-
-function loadProgress(): Progress {
+function loadProgress(): Set<string> {
   try {
-    return JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf-8'))
+    const data = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf-8'))
+    return new Set(data.done || [])
   } catch {
-    return { done: [], channelIds: {} }
+    return new Set()
   }
 }
 
-function saveProgress(p: Progress) {
-  fs.writeFileSync(PROGRESS_FILE, JSON.stringify(p, null, 2))
+function saveProgress(done: Set<string>) {
+  fs.writeFileSync(PROGRESS_FILE, JSON.stringify({ done: Array.from(done) }, null, 2))
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
@@ -215,7 +202,7 @@ function parseDuration(iso: string): string {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
-function checkQuota(label = '') {
+function checkQuota() {
   if (apiUnitsUsed >= MAX_API_UNITS) {
     console.log(`\n⚠️  Quota atteint (${apiUnitsUsed} unités).`)
     console.log('Progression sauvegardée — relance demain.')
@@ -223,68 +210,12 @@ function checkQuota(label = '') {
   }
 }
 
-// ─── Trouver le Channel ID ────────────────────────────────────────────────────
-async function findChannelId(name: string, slug: string): Promise<string | null> {
-  // Tentative 1 : forHandle (1 unité)
-  const handles = [`@${slug}`, `@${name.replace(/[^a-zA-Z0-9]/g, '')}`, `@${name.replace(/\s+/g, '')}`]
-  for (const handle of handles) {
-    checkQuota()
-    try {
-      const res = await youtube.channels.list({ part: ['id'], forHandle: handle })
-      apiUnitsUsed++
-      const id = res.data.items?.[0]?.id
-      if (id) return id
-    } catch { /* essai suivant */ }
-    await sleep(80)
-  }
-
-  // Tentative 2 : forUsername (1 unité)
-  checkQuota()
-  try {
-    const res = await youtube.channels.list({ part: ['id'], forUsername: slug })
-    apiUnitsUsed++
-    const id = res.data.items?.[0]?.id
-    if (id) return id
-  } catch { }
-
-  // Tentative 3 : search.list (100 unités — fallback)
-  checkQuota()
-  try {
-    const res = await youtube.search.list({
-      part: ['snippet'],
-      q: name,
-      type: ['channel'],
-      regionCode: 'FR',
-      relevanceLanguage: 'fr',
-      maxResults: 3,
-    })
-    apiUnitsUsed += 100
-
-    // Prend la première chaîne dont le titre ressemble au nom
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const target = norm(name)
-    for (const item of res.data.items || []) {
-      const title = norm(item.snippet?.channelTitle || '')
-      if (title.includes(target.slice(0, 6)) || target.includes(title.slice(0, 6))) {
-        return item.snippet?.channelId || item.id?.channelId || null
-      }
-    }
-    // Si aucune correspondance exacte, prend le premier résultat
-    const first = res.data.items?.[0]
-    return first?.snippet?.channelId || first?.id?.channelId || null
-  } catch { }
-
-  return null
-}
-
 // ─── Importer les vidéos d'une chaîne ────────────────────────────────────────
 async function importChannel(channelId: string, channelName: string): Promise<number> {
   checkQuota()
 
-  // Récupère la playlist "uploads" et les infos de la chaîne
   let uploadsId: string | null = null
   let channelThumb: string | null = null
-  let subscriberCount = 0
 
   try {
     const res = await youtube.channels.list({
@@ -296,12 +227,10 @@ async function importChannel(channelId: string, channelName: string): Promise<nu
     if (!ch) return 0
     uploadsId = ch.contentDetails?.relatedPlaylists?.uploads || null
     channelThumb = ch.snippet?.thumbnails?.default?.url || null
-    subscriberCount = parseInt(ch.statistics?.subscriberCount || '0')
   } catch { return 0 }
 
   if (!uploadsId) return 0
 
-  // Récupère les IDs de vidéos via la playlist
   const videoIds: string[] = []
   let pageToken: string | undefined
 
@@ -326,7 +255,6 @@ async function importChannel(channelId: string, channelName: string): Promise<nu
 
   if (!videoIds.length) return 0
 
-  // Récupère les détails de chaque vidéo (par batchs de 50)
   let imported = 0
   for (let i = 0; i < videoIds.length; i += 50) {
     checkQuota()
@@ -338,7 +266,6 @@ async function importChannel(channelId: string, channelName: string): Promise<nu
       })
       apiUnitsUsed++
 
-      // Vérifie si un créateur Notly a déjà revendiqué cette chaîne
       const { data: creator } = await supabase
         .from('creators')
         .select('id')
@@ -380,8 +307,8 @@ async function importChannel(channelId: string, channelName: string): Promise<nu
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('🇫🇷 Notly — Seed 156 chaînes françaises')
-  console.log('==========================================')
+  console.log('🇫🇷 Notly — Seed 143 chaînes françaises (IDs hardcodés)')
+  console.log('============================================================')
   console.log(`Max vidéos par chaîne : ${MAX_VIDEOS_PER_CHANNEL}`)
   console.log(`Quota API max : ${MAX_API_UNITS} unités/run`)
   console.log('')
@@ -391,35 +318,15 @@ async function main() {
     process.exit(1)
   }
 
-  const progress = loadProgress()
-  const doneSet = new Set(progress.done)
-  const channelIdCache = progress.channelIds
-
+  const doneSet = loadProgress()
   const remaining = CHANNELS.filter(([name]) => !doneSet.has(name))
-  console.log(`📊 ${CHANNELS.length} chaînes au total — ${doneSet.size} déjà traitées — ${remaining.length} restantes\n`)
+  console.log(`📊 ${CHANNELS.length} chaînes — ${doneSet.size} déjà traitées — ${remaining.length} restantes\n`)
 
   for (let i = 0; i < remaining.length; i++) {
-    const [name, slug] = remaining[i]
+    const [name, channelId] = remaining[i]
     checkQuota()
 
-    process.stdout.write(`[${i + 1}/${remaining.length}] ${name} ... `)
-
-    // Trouver le channel ID (depuis le cache ou YouTube)
-    let channelId = channelIdCache[name]
-    if (!channelId) {
-      channelId = (await findChannelId(name, slug)) || ''
-      if (channelId) {
-        channelIdCache[name] = channelId
-        saveProgress({ done: Array.from(doneSet), channelIds: channelIdCache })
-      }
-    }
-
-    if (!channelId) {
-      console.log(`❌ introuvable (API: ${apiUnitsUsed})`)
-      doneSet.add(name) // marque comme traité pour ne pas reessayer
-      saveProgress({ done: Array.from(doneSet), channelIds: channelIdCache })
-      continue
-    }
+    process.stdout.write(`[${i + 1}/${remaining.length}] ${name} (${channelId}) ... `)
 
     const count = await importChannel(channelId, name)
     totalVideos += count
@@ -427,23 +334,19 @@ async function main() {
 
     console.log(`✅ ${count} vidéos | API: ${apiUnitsUsed} | Total: ${totalVideos}`)
 
-    // Sauvegarde tous les 5 canaux
-    if (i % 5 === 0) {
-      saveProgress({ done: Array.from(doneSet), channelIds: channelIdCache })
-    }
-
+    if (i % 5 === 0) saveProgress(doneSet)
     await sleep(150)
   }
 
-  saveProgress({ done: Array.from(doneSet), channelIds: channelIdCache })
+  saveProgress(doneSet)
 
-  console.log('\n==========================================')
+  console.log('\n============================================================')
   console.log('✅ Terminé !')
   console.log(`   Chaînes traitées : ${doneSet.size}/${CHANNELS.length}`)
   console.log(`   Vidéos importées : ${totalVideos.toLocaleString()}`)
   console.log(`   Unités API utilisées : ${apiUnitsUsed} / 10,000`)
   if (doneSet.size < CHANNELS.length) {
-    console.log('\n   Relance demain pour continuer avec les chaînes restantes.')
+    console.log('\n   Relance demain pour continuer.')
   }
 }
 
